@@ -56,7 +56,10 @@ function host({ failFirst }) {
   check(() => assert.equal(calls[0].provider, 'deepseek-official'), 'provider comes from the session header');
 }
 
-// 2. unknown effort: retry once without it, everything else unchanged
+// 2. unknown effort: retry once without it, and give that attempt more room.
+//    Dropping the effort puts the model back into thinking mode, so the
+//    effort-off budget is no longer enough — see p67 for the measured failure
+//    (request succeeds, returns no text, extraction reports llmFailed).
 {
   const { calls, ctx } = host({ failFirst: true });
   const call = makeLlmCall(ctx, session, null);
@@ -65,7 +68,10 @@ function host({ failFirst }) {
   }, 'the retry error still propagates');
   check(() => assert.equal(calls.length, 2), 'exactly one fallback attempt');
   check(() => assert.equal(calls[1].reasoningEffort, undefined), 'the fallback drops the effort');
-  check(() => assert.equal(calls[1].maxTokens, 900), 'the fallback keeps the budget');
+  check(
+    () => assert.ok(calls[1].maxTokens > calls[0].maxTokens),
+    'the fallback raises the budget, because a thinking model needs more room',
+  );
   check(() => assert.equal(calls[1].model, 'deepseek-flash'), 'the fallback keeps the model');
 }
 
